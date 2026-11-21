@@ -1,0 +1,24 @@
+{
+  "name": "zra-brup",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"node server.mjs\" \"vite\"",
+    "server": "node server.mjs",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "http-proxy": "^1.18.1",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "concurrently": "latest"
+  }
+}
