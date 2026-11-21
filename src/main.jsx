@@ -1,7 +1,7 @@
 import React,{useState}from'react';
 import{createRoot}from'react-dom/client';
 import{ShieldCheck,Settings,Search,ChevronDown,Send,Trash2,Globe,SlidersHorizontal,Copy,RefreshCw,Radio}from'lucide-react';
-import'./styles.css';
+import'./styles.css';import'./splitter.js';
 const req0=`GET / HTTP/1.1\nHost: demo.test\nX-Client-IP: 127.0.0.1\nCookie: session=zra-demo; theme=dark\nUser-Agent: Sentinel/0.1\nAccept: text/html,application/xhtml+xml\nConnection: close`,res0=`HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\nContent-Length: 12408\nX-Client-IP: 127.0.0.1\nSet-Cookie: session=zra-demo; Path=/; HttpOnly\n\n<html>\n  <body><h1>demo.test</h1></body>\n</html>`;
 const history0=[{id:1,method:'GET',host:'demo.test',path:'/',status:200,size:'12.4 KB',time:'just now'},{id:2,method:'POST',host:'api.demo.test',path:'/login',status:401,size:'842 B',time:'2 min ago'},{id:3,method:'GET',host:'cdn.demo.test',path:'/assets/app.js',status:200,size:'86.2 KB',time:'4 min ago'}];
 const hex=v=>Array.from(new TextEncoder().encode(v)).map((b,i)=>`${b.toString(16).padStart(2,'0')}${(i+1)%16?' ':'\n'}`).join('').trim();
