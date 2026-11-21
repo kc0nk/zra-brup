@@ -46,6 +46,23 @@ function App() {
   const [repeaterTabs, setRepeaterTabs] = useState([{ id: 1, name: '1', request: requestSample, response: responseSample, requestMode: 'Pretty', responseMode: 'Pretty' }]);
   const [activeRepeater, setActiveRepeater] = useState(1);
 
+  useEffect(() => {
+    let alive = true;
+    const loadHistory = async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:4173/api/history');
+        if (!response.ok) return;
+        const items = await response.json();
+        if (alive) setHistory(items);
+      } catch {
+        // The UI can still be used while the proxy backend is stopped.
+      }
+    };
+    loadHistory();
+    const timer = setInterval(loadHistory, 1000);
+    return () => { alive = false; clearInterval(timer); };
+  }, []);
+
   return <div className="app">
     <header className="topbar"><div className="brand"><div className="brandmark"><ShieldCheck size={18} /></div><span>ZRA BRUP</span><small>PROXY WORKBENCH</small></div><div className="top-actions"><HelpCircle size={17} /><Settings size={17} /><div className="avatar">KC</div></div></header>
     <nav className="tabs">{['Intercept', 'HTTP proxy', 'Repeater', 'Collaborator', 'Scanning'].map((item) => <button key={item} onClick={() => setTab(item)} className={tab === item ? 'active' : ''}>{item}{item === 'HTTP proxy' && <span className="count">{history.length}</span>}</button>)}<button className="settings-tab" onClick={() => setTab('Proxy settings')}><Settings size={16} /> Proxy settings</button></nav>

@@ -5,6 +5,19 @@ export default function SettingsPanel() {
   const [apiKey, setApiKey] = useState('');
   const [aiUrl, setAiUrl] = useState('https://api.openai.com/v1');
   const [model, setModel] = useState('gpt-4o-mini');
+  const [status, setStatus] = useState('');
+
+  const openBrowser = async () => {
+    setStatus('Opening browser…');
+    try {
+      const response = await fetch('http://127.0.0.1:4173/api/browser', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: proxyUrl }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to open browser');
+      setStatus('Browser opened through the proxy.');
+    } catch (error) {
+      setStatus(error.message || 'Proxy backend is not running.');
+    }
+  };
 
   return <div className="settings-page">
     <h1>Proxy settings</h1>
@@ -14,7 +27,8 @@ export default function SettingsPanel() {
         <span>URL proxy</span>
         <input type="url" value={proxyUrl} onChange={(event) => setProxyUrl(event.target.value)} placeholder="http://127.0.0.1:8080" />
       </label>
-      <button className="primary" type="button">Save</button>
+      <button className="primary" type="button" onClick={openBrowser}>Save &amp; open browser</button>
+      {status && <small className="settings-status">{status}</small>}
     </div>
     <div className="settings-card ai-settings-card">
       <div className="settings-card-heading">
