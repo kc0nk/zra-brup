@@ -1,15 +1,63 @@
-import React,{useState}from'react';
-import{createRoot}from'react-dom/client';
-import{ShieldCheck,Settings,Search,ChevronDown,Send,Trash2,Globe,SlidersHorizontal,Copy,RefreshCw,Radio}from'lucide-react';
-import'./styles.css';import'./splitter.js';
-const req0=`GET / HTTP/1.1\nHost: demo.test\nX-Client-IP: 127.0.0.1\nCookie: session=zra-demo; theme=dark\nUser-Agent: Sentinel/0.1\nAccept: text/html,application/xhtml+xml\nConnection: close`,res0=`HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\nContent-Length: 12408\nX-Client-IP: 127.0.0.1\nSet-Cookie: session=zra-demo; Path=/; HttpOnly\n\n<html>\n  <body><h1>demo.test</h1></body>\n</html>`;
-const history0=[{id:1,method:'GET',host:'demo.test',path:'/',status:200,size:'12.4 KB',time:'just now'},{id:2,method:'POST',host:'api.demo.test',path:'/login',status:401,size:'842 B',time:'2 min ago'},{id:3,method:'GET',host:'cdn.demo.test',path:'/assets/app.js',status:200,size:'86.2 KB',time:'4 min ago'}];
-const hex=v=>Array.from(new TextEncoder().encode(v)).map((b,i)=>`${b.toString(16).padStart(2,'0')}${(i+1)%16?' ':'\n'}`).join('').trim();
-function FormatTabs({mode,setMode}){return <div className="format-tabs">{['Pretty','Raw','Hex'].map(x=><button className={mode===x?'active':''} onClick={()=>setMode(x)} key={x}>{x}</button>)}</div>}
-function Editor({value,setValue,mode,setMode}){const[search,setSearch]=useState('');const shown=value.match(/^(GET|POST|PUT|PATCH|DELETE) /)&&!value.includes('Cookie:')?value.replace(/\nUser-Agent:/,'\nX-Client-IP: 127.0.0.1\nCookie: session=zra-demo; theme=dark\nUser-Agent:'):value;const hits=search?((mode==='Hex'?hex(shown):shown).match(new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'))||[]).length:0;return <div className="editor"><FormatTabs mode={mode} setMode={setMode}/><textarea value={mode==='Hex'?hex(shown):shown} onChange={e=>mode!=='Hex'&&setValue(e.target.value)} readOnly={mode==='Hex'} spellCheck="false"/><div className="editor-search"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search"/><span>{hits} highlights</span></div></div>}
-function SettingsPanel(){return <div className="settings-page"><h1>Proxy settings</h1><p className="subtitle">Configure the local listener used by ZRA BRUP.</p></div>}
-function App(){const[tab,setTab]=useState('Intercept'),[intercept,setIntercept]=useState(false),[history,setHistory]=useState(history0),[selected,setSelected]=useState(history0[0]),[request,setRequest]=useState(req0),[response,setResponse]=useState(res0),[requestMode,setRequestMode]=useState('Pretty'),[responseMode,setResponseMode]=useState('Pretty'),[filter,setFilter]=useState(''),[rep,setRep]=useState([{id:1,name:'1',request:req0,response:res0,rm:'Pretty',sm:'Pretty'}]),[activeRep,setActiveRep]=useState(1),[payload,setPayload]=useState('zra-'+Math.random().toString(36).slice(2,18)+'.oast.local'),[copied,setCopied]=useState(false);const rows=history.filter(x=>`${x.host}${x.path}${x.method}`.toLowerCase().includes(filter.toLowerCase()));const choose=x=>{setSelected(x);setRequest(`${x.method} ${x.path} HTTP/1.1\nHost: ${x.host}\nUser-Agent: Sentinel/0.1\nAccept: */*\nConnection: close`)};const current=rep.find(x=>x.id===activeRep)||rep[0];return <div className="app"><header className="topbar"><div className="brand"><div className="brandmark"><ShieldCheck size={18}/></div><span>ZRA BRUP</span><small>PROXY WORKBENCH</small></div><div className="target"><span className="dot"/> Workspace: <b>Local testing</b><ChevronDown size={14}/></div><div className="top-actions"><Settings size={17}/><div className="avatar">KC</div></div></header><nav className="tabs">{['Intercept','HTTP proxy','Repeater','Collaborator'].map(x=><button key={x} onClick={()=>setTab(x)} className={tab===x?'active':''}>{x}{x==='HTTP proxy'&&<span className="count">{history.length}</span>}</button>)}<button className="settings-tab" onClick={()=>setTab('Proxy settings')}><Settings size={16}/> Proxy settings</button></nav><main>
-{tab==='Intercept'&&<div className="empty"><div className="empty-icon"><ShieldCheck size={48}/></div><h1>Intercept is {intercept?'on':'off'}</h1><p>Messages between your browser and target servers are held here.<br/>Analyze and modify each request before forwarding it.</p><button className="primary large" onClick={()=>setIntercept(!intercept)}>{intercept?'Intercept on':'Start intercepting'}</button></div>}
-{tab==='HTTP proxy'&&<><section className="proxy-filter"><SlidersHorizontal size={15}/><span>Filter settings: hiding CSS and image content</span><div className="search"><Search size={15}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Search"/></div><span className="filter-on">● Filter on</span></section><section className="history-toolbar"><div className="search"><Search size={15}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filter requests..."/></div><button className="secondary" onClick={()=>setHistory([])}><Trash2 size={15}/> Clear history</button></section><div className="history-grid"><div className="table"><div className="thead"><span>#</span><span>Host</span><span>Method</span><span>URL</span><span>Status</span><span>Length</span><span>MIME type</span><span>Time</span></div>{rows.map((x,i)=><div className={'trow '+(selected.id===x.id?'selected':'')} onClick={()=>choose(x)} key={x.id}><span>{i+1}</span><span className="host">{x.host}</span><span className={'method '+x.method.toLowerCase()}>{x.method}</span><span>{x.path}</span><span className={x.status>=400?'bad':'good'}>{x.status}</span><span>{x.size}</span><span>HTML</span><span className="muted">{x.time}</span></div>)}</div><div className="side-panel"><div className="panel-title">Original request <span>#{selected.id}</span></div><div className="dual-editors"><Editor value={request} setValue={setRequest} mode={requestMode} setMode={setRequestMode}/><Editor value={response} setValue={setResponse} mode={responseMode} setMode={setResponseMode}/></div></div></div></>}
-{tab==='Repeater'&&<div className="repeater-page"><div className="repeater-tabs">{rep.map(x=><button className={activeRep===x.id?'repeater-tab active':'repeater-tab'} onClick={()=>setActiveRep(x.id)} key={x.id}>{x.name}<span>×</span></button>)}<button className="new-repeater" onClick={()=>{const id=Date.now();setRep([...rep,{id,name:String(rep.length+1),request:req0,response:'',rm:'Pretty',sm:'Pretty'}]);setActiveRep(id)}}>＋</button></div><div className="repeater-head"><h1>Repeater</h1><span>Edit and resend requests manually</span><button className="primary" onClick={()=>setResponse('HTTP/1.1 200 OK\n\nRequest forwarded successfully.')}><Send size={14}/> Send</button></div><div className="repeater-grid"><Editor value={current.request} setValue={v=>setRep(rep.map(x=>x.id===activeRep?{...x,request:v}:x))} mode={current.rm} setMode={m=>setRep(rep.map(x=>x.id===activeRep?{...x,rm:m}:x))}/><Editor value={current.response||response} setValue={()=>{}} mode={current.sm} setMode={m=>setRep(rep.map(x=>x.id===activeRep?{...x,sm:m}:x))}/></div></div>}
-{tab==='Collaborator'&&<div className="collab-page"><div className="collab-toolbar"><label>Payloads to generate: <input value="1" readOnly/></label><button className="primary" onClick={()=>{navigator.clipboard?.writeText(payload);setCopied(true);setTimeout(()=>setCopied(false),1500)}}><Copy size={14}/> {copied?'Copied':'Copy to clipboard'}</button><button className="secondary" onClick={()=>setPayload('zra-'+Math.random().toString(36).slice(2,18)+'.oast.local')}><RefreshCw size={14}/> Poll now</button><span className="poll-status"><Radio size={14}/> Polling manually</span></div><div className="collab-empty"><div className="collab-icon"><Globe size={55}/></div><h1>Your interactions will appear here</h1><p>Copy a Collaborator payload and use it during authorized testing.</p></div><div className="payload-line">Current payload: <code>{payload}</code></div></div>}{tab==='Proxy settings'&&<SettingsPanel/>}</main><footer><span><span className="status-dot"/> Proxy running on <b>127.0.0.1:8080</b></span><span>Events {history.length} · All issues 0</span></footer></div>};createRoot(document.getElementById('root')).render(<App/>);
+import { useEffect, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { HelpCircle, Settings, ShieldCheck } from 'lucide-react';
+import './styles.css';
+import Collaborator from './components/Collaborator';
+import HttpProxy from './components/HttpProxy';
+import Repeater from './components/Repeater';
+import Scanning from './components/Scanning';
+import SettingsPanel from './components/SettingsPanel';
+import Editor from './components/Editor';
+
+const requestSample = '';
+const responseSample = '';
+const initialHistory = [];
+
+function InterceptPanel({ enabled, setEnabled, request, setRequest }) {
+  const [queue, setQueue] = useState([]);
+  const [mode, setMode] = useState('Pretty');
+  const [tableHeight, setTableHeight] = useState(72);
+  const [dragging, setDragging] = useState(false);
+  const current = queue[0];
+  const action = (kind) => { if (!current) return; setQueue(queue.slice(1)); if (kind === 'forward') setEnabled(true); };
+  useEffect(() => {
+    if (!dragging) return undefined;
+    const move = (event) => setTableHeight(Math.max(50, Math.min(window.innerHeight - 360, event.clientY - 210)));
+    const stop = () => setDragging(false);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop, { once: true });
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); };
+  }, [dragging]);
+  return <div className="intercept-page">
+    <section className="intercept-toolbar"><button className={'intercept ' + (enabled ? 'on' : '')} onClick={() => setEnabled(!enabled)}><span className="switch"><span /></span> Intercept {enabled ? 'on' : 'off'}</button><button className="primary" disabled={!enabled || !current} onClick={() => action('forward')}><span>→</span> Forward</button><button className="secondary" disabled={!current} onClick={() => action('drop')}>Drop <span>⌄</span></button><span className="spacer" /><span className="target-request">{current ? `Request to ${current.url}` : 'No intercepted request'}</span><button className="secondary">◉ Open browser</button></section>
+    <div className="intercept-table" style={{ flex: `0 0 ${tableHeight}px` }}><div className="intercept-row intercept-header"><span>Time</span><span>Type</span><span>Direction</span><span>Method</span><span>URL</span><span>Status code</span><span>Length</span></div>{queue.map((item) => <div className="intercept-row selected" key={item.id}><span>{item.time}</span><span>{item.type}</span><span>{item.direction} Request</span><span>{item.method}</span><span>{item.url}</span><span>—</span><span>—</span></div>)}</div><div className={'intercept-divider ' + (dragging ? 'dragging' : '')} onPointerDown={(event) => { event.preventDefault(); setDragging(true); }} role="separator" aria-orientation="horizontal" aria-label="Resize intercept request" />
+    {current ? <div className="intercept-detail"><div className="intercept-request"><div className="detail-title">Request</div><Editor value={request} onChange={setRequest} mode={mode} onModeChange={setMode} /></div><div className="intercept-inspector"><b>Inspector</b><p>Request attributes <span>2</span></p><p>Request cookies <span>2</span></p><p>Request headers <span>20</span></p></div></div> : <div className="empty"><div className="empty-icon"><ShieldCheck size={48} /></div><h1>{enabled ? 'Waiting for request' : 'Intercept is off'}</h1><p>{enabled ? 'New browser requests will appear here for review.' : 'Turn Intercept on to hold requests before forwarding them.'}</p><button className="primary large" onClick={() => setEnabled(true)}>{enabled ? 'Waiting for request' : 'Start intercepting'}</button></div>}
+  </div>;
+}
+
+function App() {
+  const [tab, setTab] = useState('Intercept');
+  const [intercept, setIntercept] = useState(false);
+  const [history, setHistory] = useState(initialHistory);
+  const [selected, setSelected] = useState(null);
+  const [request, setRequest] = useState(requestSample);
+  const [requestMode, setRequestMode] = useState('Pretty');
+  const [responseMode, setResponseMode] = useState('Pretty');
+  const [repeaterTabs, setRepeaterTabs] = useState([{ id: 1, name: '1', request: requestSample, response: responseSample, requestMode: 'Pretty', responseMode: 'Pretty' }]);
+  const [activeRepeater, setActiveRepeater] = useState(1);
+
+  return <div className="app">
+    <header className="topbar"><div className="brand"><div className="brandmark"><ShieldCheck size={18} /></div><span>ZRA BRUP</span><small>PROXY WORKBENCH</small></div><div className="top-actions"><HelpCircle size={17} /><Settings size={17} /><div className="avatar">KC</div></div></header>
+    <nav className="tabs">{['Intercept', 'HTTP proxy', 'Repeater', 'Collaborator', 'Scanning'].map((item) => <button key={item} onClick={() => setTab(item)} className={tab === item ? 'active' : ''}>{item}{item === 'HTTP proxy' && <span className="count">{history.length}</span>}</button>)}<button className="settings-tab" onClick={() => setTab('Proxy settings')}><Settings size={16} /> Proxy settings</button></nav>
+    <main>
+      {tab === 'Intercept' && <InterceptPanel enabled={intercept} setEnabled={setIntercept} request={request} setRequest={setRequest} />}
+      {tab === 'HTTP proxy' && <HttpProxy history={history} setHistory={setHistory} selected={selected} setSelected={setSelected} request={request} setRequest={setRequest} response={responseSample} requestMode={requestMode} setRequestMode={setRequestMode} responseMode={responseMode} setResponseMode={setResponseMode} />}
+      {tab === 'Repeater' && <Repeater tabs={repeaterTabs} setTabs={setRepeaterTabs} activeId={activeRepeater} setActiveId={setActiveRepeater} response={responseSample} />}
+      {tab === 'Collaborator' && <Collaborator />}
+      {tab === 'Scanning' && <Scanning />}
+      {tab === 'Proxy settings' && <SettingsPanel />}
+    </main>
+  </div>;
+}
+
+createRoot(document.getElementById('root')).render(<App />);

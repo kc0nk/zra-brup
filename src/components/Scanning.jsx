@@ -1,0 +1,19 @@
+import { useEffect, useMemo, useState } from 'react';
+import xssText from '../../payloads/intruder/xss_injection/xss_alert.txt?raw';
+import sqliText from '../../payloads/intruder/sql_injection/Generic_Fuzz.txt?raw';
+
+const readPayloads = (text, category) => text.split(/\r?\n/).map((payload, index) => payload.trim()).filter(Boolean).map((payload, index) => ({ id: `${category}-${index}`, payload, category }));
+const catalog = [...readPayloads(xssText, 'XSS'), ...readPayloads(sqliText, 'SQLi')];
+
+export default function Scanning() {
+  const [progress, setProgress] = useState(100);
+  const [running, setRunning] = useState(false);
+  const target = '';
+  const [analyzed, setAnalyzed] = useState(false);
+  const [results, setResults] = useState([]);
+  const active = useMemo(() => catalog[results.length % catalog.length], [results.length]);
+
+  useEffect(() => { if (!running) return undefined; setProgress(0); let value = 0; const timer = setInterval(() => { value += 10; setProgress(value); if (value >= 100) { clearInterval(timer); setRunning(false); setResults(catalog.slice(0, 8).map((payload, index) => ({ ...payload, host: target || 'Target', url: index % 2 ? '/login' : '/', status: index === 1 ? 401 : 200, method: index % 2 ? 'POST' : 'GET' }))); } }, 140); return () => clearInterval(timer); }, [running, target]);
+
+  return <div className="scan-page"><div className="scan-head"><div><h1>Scanning</h1><p>Payload-based checks for your authorized test scope.</p></div><button className="primary" onClick={() => setRunning(true)} disabled={running}>{running ? 'Running…' : 'Run payload scan'}</button></div><div className="scan-results"><div className="scan-loading"><span className={running ? 'spinner active' : 'spinner'} /><span>{running ? `Testing ${active?.category || 'payload'}… ${progress}%` : `Payload catalog: ${catalog.length} checks ready`}</span><div className="progress-track"><div className="progress-value" style={{ width: `${progress}%` }} /></div></div><div className="results-head"><b>Payload results</b><span>{results.length} tests</span></div><div className="results-table"><div className="results-row results-header"><span>Host</span><span>URL</span><span>Payload</span><span>Status</span><span>Method</span></div>{results.map((item) => <div className="results-row" key={item.id}><span className="host">{item.host}</span><span>{item.url}</span><span className="payload-cell" title={item.payload}>{item.payload}</span><span className={item.status >= 400 ? 'bad' : 'good'}>{item.status}</span><span className={'method ' + item.method.toLowerCase()}>{item.method}</span></div>)}</div><section className="ai-card"><div><span className="writeup-label">AI ASSISTANT</span><h2>Analyze payload results</h2><p>Generate a structured write-up from the payload test results.</p></div><button className="ai-analyze" onClick={() => setAnalyzed(true)}>✦ Analyze with AI</button></section>{analyzed && <article className="ai-writeup"><div className="writeup-heading"><div><span className="writeup-label">AI ANALYSIS</span><h2>Payload scan write-up</h2></div><span className="writeup-time">Generated from {results.length} tests</span></div><section><h3>Summary</h3><p>The payload scan reviewed {results.length} test cases against <b>{target}</b>. Findings should be verified manually within the authorized scope.</p></section><section><h3>Observed results</h3><p>Payload categories tested: <b>{[...new Set(results.map((item) => item.category))].join(', ')}</b>.</p><p>Responses with status <code>401</code> should be reviewed for expected authentication behavior; successful responses should be checked for safe input handling and output encoding.</p></section><section><h3>Recommendation</h3><p>Validate input server-side, use parameterized queries, encode output by context, and review security headers and cookie flags.</p></section></article>}</div></div>;
+}
