@@ -20,7 +20,7 @@ function InterceptPanel({ enabled, setEnabled, request, setRequest }) {
   const [dragging, setDragging] = useState(false);
   const current = queue[0];
   const refreshPending = async () => { try { const response = await fetch('http://127.0.0.1:4173/api/intercept/pending'); if (response.ok) setQueue(await response.json()); } catch {} };
-  const toggle = async () => { const next = !enabled; setEnabled(next); try { await fetch('http://127.0.0.1:4173/api/intercept/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: next }) }); refreshPending(); } catch {} };
+  const toggle = async () => { const next = !enabled; setEnabled(next); if (!next) setQueue([]); try { await fetch('http://127.0.0.1:4173/api/intercept/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: next }) }); refreshPending(); } catch {} };
   const action = async (kind) => { if (!current) return; await fetch(`http://127.0.0.1:4173/api/intercept/${current.id}/${kind}`, { method: 'POST' }); refreshPending(); };
   useEffect(() => {
     if (!dragging) return undefined;
@@ -49,6 +49,7 @@ function App() {
   const [responseMode, setResponseMode] = useState('Pretty');
   const [repeaterTabs, setRepeaterTabs] = useState([{ id: 1, name: '1', request: requestSample, response: responseSample, requestMode: 'Pretty', responseMode: 'Pretty' }]);
   const [activeRepeater, setActiveRepeater] = useState(1);
+  const sendToRepeater = (item) => { const id = Date.now(); setRepeaterTabs((tabs) => [...tabs, { id, name: String(tabs.length + 1), request: item.request || '', response: '', target: Boolean(item.tls), requestMode: 'Pretty', responseMode: 'Pretty' }]); setActiveRepeater(id); setTab('Repeater'); };
 
   useEffect(() => {
     let alive = true;
@@ -72,7 +73,7 @@ function App() {
     <nav className="tabs">{['Intercept', 'HTTP proxy', 'Repeater', 'Collaborator', 'Scanning'].map((item) => <button key={item} onClick={() => setTab(item)} className={tab === item ? 'active' : ''}>{item}{item === 'HTTP proxy' && <span className="count">{history.length}</span>}</button>)}<button className="settings-tab" onClick={() => setTab('Proxy settings')}><Settings size={16} /> Proxy settings</button></nav>
     <main>
       {tab === 'Intercept' && <InterceptPanel enabled={intercept} setEnabled={setIntercept} request={request} setRequest={setRequest} />}
-      {tab === 'HTTP proxy' && <HttpProxy history={history} setHistory={setHistory} selected={selected} setSelected={setSelected} request={request} setRequest={setRequest} response={responseSample} requestMode={requestMode} setRequestMode={setRequestMode} responseMode={responseMode} setResponseMode={setResponseMode} />}
+      {tab === 'HTTP proxy' && <HttpProxy history={history} setHistory={setHistory} selected={selected} setSelected={setSelected} request={request} setRequest={setRequest} response={responseSample} requestMode={requestMode} setRequestMode={setRequestMode} responseMode={responseMode} setResponseMode={setResponseMode} onSendToRepeater={sendToRepeater} />}
       {tab === 'Repeater' && <Repeater tabs={repeaterTabs} setTabs={setRepeaterTabs} activeId={activeRepeater} setActiveId={setActiveRepeater} response={responseSample} />}
       {tab === 'Collaborator' && <Collaborator />}
       {tab === 'Scanning' && <Scanning />}
