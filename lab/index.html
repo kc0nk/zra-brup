@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZRA Lab — Local Security Playground</title>
+    <link rel="stylesheet" href="/lab/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+    <header class="lab-nav"><a class="lab-brand" href="/lab/"><span class="brand-orb">Z</span><span>ZRA <b>LAB</b></span></a><nav><a class="active" href="#overview">Overview</a><a href="#playground">Playground</a><a href="#activity">Activity</a></nav><span class="scope"><i></i> Local scope</span></header>
+    <main>
+      <section class="hero" id="overview"><div class="eyebrow"><span></span> CONTROLLED SECURITY PLAYGROUND</div><h1>Learn the traffic.<br /><em>Understand the surface.</em></h1><p>A polished local lab for exploring HTTP requests, responses, cookies, headers, and authentication flows through ZRA BRUP.</p><div class="hero-actions"><a class="button button-primary" href="#playground">Open playground <span>↗</span></a><a class="button button-quiet" href="#activity">View activity</a></div><div class="hero-stats"><div><strong>04</strong><span>Interactive flows</span></div><div><strong>LOCAL</strong><span>Safe test scope</span></div><div><strong>HTTP</strong><span>Request visibility</span></div></div></section>
+      <section class="section" id="playground"><div class="section-heading"><div><div class="eyebrow">REQUEST PLAYGROUND</div><h2>Make a request</h2></div><span class="section-note">Traffic appears in ZRA BRUP automatically</span></div><div class="playground-grid">
+        <article class="lab-card login-card"><div class="card-top"><span class="icon pink">↗</span><span class="tag">POST /lab/api/login</span></div><h3>Member access</h3><p>Send a login request and inspect its status, body, and headers.</p><form id="login-form"><label>Email<input name="email" type="email" placeholder="learner@zra.lab" /></label><label>Password<input name="password" type="password" placeholder="••••••••" /></label><button class="button button-primary" type="submit">Sign in <span>→</span></button></form><div class="result" id="login-result">Waiting for a request…</div></article>
+        <article class="lab-card search-card"><div class="card-top"><span class="icon cyan">⌕</span><span class="tag">GET /lab/api/search</span></div><h3>Search index</h3><p>Try a query and observe URL parameters in the proxy history.</p><form id="search-form"><label>Query<div class="input-button"><input name="q" placeholder="security headers" /><button type="submit">Search</button></div></label></form><div class="result result-list" id="search-result">No search has been run.</div></article>
+        <article class="lab-card profile-card"><div class="card-top"><span class="icon violet">◎</span><span class="tag">GET /lab/api/profile</span></div><h3>Profile endpoint</h3><p>Fetch a JSON response and view the request in HTTP proxy.</p><button class="button button-outline" id="profile-button">Fetch profile <span>↗</span></button><pre class="result code-result" id="profile-result">Click fetch to make a request.</pre></article>
+      </div></section>
+      <section class="activity-section" id="activity"><div class="activity-copy"><div class="eyebrow">LOCAL ACTIVITY</div><h2>Your test surface,<br /><em>at a glance.</em></h2><p>Keep the lab open beside ZRA BRUP. Every action creates a clean, repeatable request for learning and verification.</p><div class="signal"><span class="signal-dot"></span><span>Lab server ready on <b>127.0.0.1:4173</b></span></div></div><div class="activity-card"><div class="activity-title"><span>Recent lab events</span><span class="live"><i></i> LIVE</span></div><div class="event"><span class="event-icon cyan">⌕</span><div><b>Search index</b><small>GET · waiting for activity</small></div><span class="event-status">READY</span></div><div class="event"><span class="event-icon pink">↗</span><div><b>Member access</b><small>POST · waiting for activity</small></div><span class="event-status">READY</span></div><div class="event"><span class="event-icon violet">◎</span><div><b>Profile endpoint</b><small>GET · waiting for activity</small></div><span class="event-status">READY</span></div></div></section>
+    </main>
+    <footer><span>© ZRA LAB</span><span>Built for authorized local testing</span><span>v0.1 playground</span></footer>
+    <script src="/lab/app.js"></script>
+  </body>
+</html>

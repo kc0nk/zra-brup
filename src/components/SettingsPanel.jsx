@@ -24,7 +24,7 @@ export default function SettingsPanel() {
     <p className="subtitle">Configure the local listener used by ZRA BRUP.</p>
     <div className="settings-card proxy-settings-card">
       <label className="url-field">
-        <span>URL proxy</span>
+        <span>Target URL</span>
         <input type="url" value={proxyUrl} onChange={(event) => setProxyUrl(event.target.value)} placeholder="http://127.0.0.1:8080" />
       </label>
       <button className="primary" type="button" onClick={openBrowser}>Save &amp; open browser</button>
