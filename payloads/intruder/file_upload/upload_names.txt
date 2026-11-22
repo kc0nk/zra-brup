@@ -1,0 +1,10 @@
+# Safe upload-name validation probes
+avatar.jpg
+avatar.php
+avatar.php.jpg
+avatar%00.jpg
+avatar..jpg
+.htaccess
+web.config
+test.svg
+test.html

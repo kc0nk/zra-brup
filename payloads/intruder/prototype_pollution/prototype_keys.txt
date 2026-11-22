@@ -1,0 +1,6 @@
+# Prototype-pollution detection keys; use only in JSON parameters
+__proto__[polluted]=true
+constructor[prototype][polluted]=true
+constructor.prototype.polluted=true
+{"__proto__":{"polluted":true}}
+{"constructor":{"prototype":{"polluted":true}}}

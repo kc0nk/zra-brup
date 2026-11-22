@@ -1,0 +1,16 @@
+# Common exposed administration and diagnostic endpoints
+/admin
+/administrator
+/manage
+/actuator
+/actuator/health
+/actuator/env
+/debug
+/server-status
+/phpinfo.php
+/.git/HEAD
+/.env
+/.DS_Store
+/swagger-ui.html
+/openapi.json
+/api-docs

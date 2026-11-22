@@ -1,0 +1,5 @@
+# CSRF token validation markers
+missing-csrf-token
+invalid-csrf-token
+csrf-token-test
+origin-mismatch-test

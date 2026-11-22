@@ -1,0 +1,7 @@
+# Non-destructive template evaluation probes
+{{7*7}}
+${7*7}
+<%= 7*7 %>
+#{7*7}
+*{7*7}
+{{7+'7'}}

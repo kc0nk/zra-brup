@@ -1,0 +1,5 @@
+# Benign markers for rate-limit and abuse-control checks
+rate-limit-test-01
+rate-limit-test-02
+rate-limit-test-03
+burst-test-disabled

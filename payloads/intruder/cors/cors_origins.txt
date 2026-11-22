@@ -1,0 +1,5 @@
+# Authorized CORS verification origins
+https://origin.example.invalid
+null
+http://localhost
+http://127.0.0.1

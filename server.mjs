@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
@@ -14,6 +14,7 @@ const COLLAB_HTTPS_PORT = 9443;
 const COLLAB_SMTP_PORT = 2525;
 const events = [];
 const collaboratorInteractions = [];
+const scanJobs = new Map();
 const waiting = new Map();
 const browserProcesses = new Set();
 const browserProfiles = new Set();
@@ -42,6 +43,30 @@ api.get('/api/collaborator/interactions', (request, response) => {
 api.delete('/api/collaborator/interactions', (_, response) => { collaboratorInteractions.length = 0; response.json({ ok: true }); });
 api.get('/api/history', (_, response) => response.json(events.filter((item) => !activeScope || inScope(item)).slice(-200).reverse()));
 api.delete('/api/history', (_, response) => { events.length = 0; response.json({ ok: true }); });
+api.get('/api/scanning/sources', (_, response) => response.json({ activeScope, requests: events.filter((item) => !activeScope || inScope(item)).slice(-100).reverse().map((item) => ({ id: item.id, host: item.host, path: item.path, method: item.method, tls: item.tls, status: item.status })) , payloads: listIntruderPayloads().slice(0, 300).map(({ category, name, payload }) => ({ category, name, payload })) }));
+api.post('/api/scanning/start', (request, response) => {
+  const sources = events.filter((item) => !activeScope || inScope(item)).slice(-100);
+  const sourceIds = new Set(Array.isArray(request.body?.sourceIds) ? request.body.sourceIds.map(String) : []);
+  const targets = sourceIds.size ? sources.filter((item) => sourceIds.has(String(item.id))) : sources;
+  if (!targets.length) return response.status(400).json({ ok: false, error: 'Belum ada request dalam scope HTTP Proxy.' });
+  const payloads = listIntruderPayloads().slice(0, Math.max(1, Math.min(Number(request.body?.limit) || 80, 300)));
+  const id = String(Date.now() + Math.random());
+  const job = { id, status: 'running', progress: 0, total: targets.length * payloads.length, tested: 0, results: [], sources: targets.length, payloadCount: payloads.length };
+  scanJobs.set(id, job);
+  runScanJob(job, targets, payloads);
+  response.json({ ok: true, id, total: job.total, sources: targets.length, payloads: payloads.length });
+});
+api.get('/api/scanning/:id', (request, response) => { const job = scanJobs.get(request.params.id); if (!job) return response.sendStatus(404); response.json(job); });
+api.post('/api/scanning/analyze', (request, response) => {
+  const findings = Array.isArray(request.body?.findings) ? request.body.findings.filter((item) => item.vulnerable) : [];
+  const categories = [...new Set(findings.map((item) => item.category))];
+  response.json({ ok: true, writeup: { title: findings.length ? `${findings.length} verified finding${findings.length === 1 ? '' : 's'}` : 'No verified findings', summary: findings.length ? `Payload testing produced evidence for ${categories.join(', ')} against captured in-scope requests.` : 'The scan did not produce a response that met the evidence threshold for a verified finding.', findings, recommendation: 'Reproduce each finding manually, confirm impact in the authorized lab, then apply context-appropriate validation, encoding, and parameterized query controls.' } });
+});
+api.post('/api/scanning/analyze-item', (request, response) => {
+  const finding = request.body?.finding;
+  if (!finding?.vulnerable) return response.status(400).json({ ok: false, error: 'Hanya finding terverifikasi yang dapat dianalisis.' });
+  response.json({ ok: true, analysis: makeFindingAnalysis(finding) });
+});
 api.get('/api/intercept/pending', (_, response) => response.json([...waiting.values()].map((item) => item.event)));
 api.post('/api/intercept/toggle', (request, response) => {
   interceptEnabled = Boolean(request.body?.enabled);
@@ -100,6 +125,99 @@ api.post('/api/repeater/send', (request, response) => {
   outgoing.end();
 });
 apiServer = api.listen(UI_PORT, () => console.log(`Sentinel API: http://127.0.0.1:${UI_PORT}`));
+
+function listIntruderPayloads() {
+  const root = path.join(process.cwd(), 'payloads', 'intruder');
+  const output = [];
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.name === '.git') continue;
+      if (entry.isDirectory()) { walk(file); continue; }
+      if (!/\.(txt|fuzz|payload|lst|list)$/i.test(entry.name)) continue;
+      let content = '';
+      try { if (statSync(file).size > 1024 * 1024) continue; content = readFileSync(file, 'utf8'); } catch { continue; }
+      const category = (file.toLowerCase().match(/(xss|sqli|sql_injection|lfi|rfi|ssti|rce|ssrf|xxe|nosql|crlf|traversal|open_redirect|auth|header|security_headers|csrf|cors|http_methods|misconfiguration|prototype_pollution|jwt|file_upload|secrets|rate_limit)/) || [])[1] || 'generic';
+      for (const line of content.split(/\r?\n/).map((value) => value.trim()).filter((value) => value && !value.startsWith('#') && !value.startsWith('//')).slice(0, 120)) output.push({ name: path.relative(root, file), category: category.toUpperCase().replace('_INJECTION', ''), payload: line });
+    }
+  };
+  try { walk(root); } catch {}
+  return output;
+}
+
+function mutateRequest(item, payload, category, collaboratorOrigin) {
+  const raw = String(item.request || '');
+  const lines = raw.split(/\r?\n/);
+  const first = lines.shift() || `${item.method} ${item.path} HTTP/1.1`;
+  const match = first.match(/^(\S+)\s+(\S+)\s+(HTTP\/\S+)$/);
+  if (!match) return null;
+  const url = new URL(match[2], `${item.tls ? 'https' : 'http'}://${item.host}`);
+  url.searchParams.set('zra_payload', payload);
+  const requestLine = `${match[1]} ${url.pathname}${url.search} ${match[3]}`;
+  const request = [requestLine, ...lines].join('\n');
+  if (category === 'CORS' || category === 'CSRF') return addRequestHeader(request, 'Origin', collaboratorOrigin);
+  return request;
+}
+
+function addRequestHeader(raw, name, value) {
+  const lines = raw.split(/\r?\n/);
+  const separator = lines.findIndex((line) => line === '');
+  const index = separator < 0 ? lines.length : separator;
+  lines.splice(index, 0, `${name}: ${value}`);
+  return lines.join('\n');
+}
+
+function sendScanRequest(raw, secure) {
+  return new Promise((resolve) => {
+    const lines = raw.split(/\r?\n/);
+    const first = lines.shift() || '';
+    const match = first.match(/^(\S+)\s+(\S+)\s+HTTP\/\S+$/);
+    const headers = {};
+    while (lines.length && lines[0] !== '') { const line = lines.shift(); const index = line.indexOf(':'); if (index > 0) headers[line.slice(0, index).trim()] = line.slice(index + 1).trim(); }
+    if (lines[0] === '') lines.shift();
+    const host = headers.Host || headers.host;
+    if (!match || !host) return resolve({ status: 0, body: '', error: 'Invalid captured request' });
+    const client = secure ? https : http;
+    const outgoing = client.request({ hostname: host.split(':')[0], port: Number(host.split(':')[1] || (secure ? 443 : 80)), path: match[2], method: match[1], headers, rejectUnauthorized: false, timeout: 6000 }, (incoming) => { const chunks = []; incoming.on('data', (chunk) => chunks.push(chunk)); incoming.on('end', () => resolve({ status: incoming.statusCode || 0, headers: incoming.headers, body: Buffer.concat(chunks).toString('utf8').slice(0, 200000) })); });
+    outgoing.on('timeout', () => { outgoing.destroy(); resolve({ status: 0, body: '', error: 'Request timeout' }); });
+    outgoing.on('error', (error) => resolve({ status: 0, body: '', error: error.message }));
+    outgoing.end();
+  });
+}
+
+async function runScanJob(job, targets, payloads) {
+  const collaborator = makeCollaboratorPayload();
+  job.collaborator = collaborator.https;
+  for (const target of targets) {
+    for (const item of payloads) {
+      const category = item.category.toUpperCase();
+      const scanPayload = item.payload.replaceAll('SSRF_TEST', collaborator.token);
+      const raw = mutateRequest(target, scanPayload, category, collaborator.https);
+      const result = raw ? await sendScanRequest(raw, target.tls) : { status: 0, body: '', error: 'Request tidak valid' };
+      const body = result.body || '';
+      const categoryLower = category.toLowerCase();
+      const xssEvidence = categoryLower.includes('xss') && body.includes(scanPayload);
+      const sqlEvidence = (categoryLower.includes('sql') || categoryLower.includes('nosql')) && (result.status >= 500 || /(sql syntax|sqlstate|mysql|postgresql|sqlite|odbc|mongoerror|unclosed quotation)/i.test(body));
+      const corsOrigin = result.headers?.['access-control-allow-origin'];
+      const corsEvidence = categoryLower.includes('cors') && corsOrigin === collaborator.https;
+      const vulnerable = Boolean(xssEvidence || sqlEvidence || corsEvidence);
+      job.results.push({ id: `${job.id}-${job.tested}`, host: target.host, url: target.path, payload: scanPayload, response: result.status || 'ERR', method: target.method, category: item.category, vulnerable, evidence: xssEvidence ? 'Payload reflected in response body' : sqlEvidence ? 'Database error signature observed' : corsEvidence ? 'Collaborator origin reflected by CORS response' : 'No vulnerability evidence observed' });
+      job.tested += 1; job.progress = Math.round((job.tested / job.total) * 100);
+    }
+  }
+  job.status = 'complete'; job.progress = 100;
+}
+
+function makeFindingAnalysis(finding) {
+  const category = String(finding.category || 'Generic').toUpperCase();
+  const isHigh = /RCE|SQL|SSRF|XXE|AUTH|JWT/.test(category);
+  const isMedium = /XSS|CORS|CSRF|SSTI|LFI|RFI|TRAVERSAL|UPLOAD/.test(category);
+  const severity = isHigh ? 'High' : isMedium ? 'Medium' : 'Low';
+  const title = `${category} evidence on ${finding.method} ${finding.url}`;
+  const impact = category.includes('XSS') ? 'Input is reflected in the response and may execute in a browser context.' : category.includes('CORS') ? 'An untrusted origin is accepted by the CORS policy, which can expose cross-origin responses.' : category.includes('SQL') ? 'Database error behavior suggests attacker-controlled input reaches a query.' : 'The response contains evidence that attacker-controlled input is processed unsafely.';
+  const remediation = category.includes('SQL') ? 'Use parameterized queries and strict server-side input validation.' : category.includes('XSS') ? 'Apply context-aware output encoding and a restrictive Content-Security-Policy.' : category.includes('CORS') ? 'Allow only explicit trusted origins and never combine wildcard origins with credentials.' : 'Validate input server-side, constrain the accepted format, and add regression coverage.';
+  return { title, severity, confidence: 'Evidence-backed', endpoint: `${finding.method} ${finding.url}`, payload: finding.payload, response: finding.response, evidence: finding.evidence, impact, reproduction: `Replay ${finding.method} ${finding.url} with the recorded payload and compare the response evidence.`, remediation };
+}
 
 function makeCollaboratorPayload() {
   const token = `zra-${Math.random().toString(36).slice(2, 18)}`;

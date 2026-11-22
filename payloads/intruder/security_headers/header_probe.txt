@@ -1,0 +1,7 @@
+# Header and response-policy probe values
+X-Forwarded-Host: evil.example.invalid
+X-Forwarded-Proto: http
+X-Original-URL: /admin
+X-Rewrite-URL: /admin
+Origin: https://origin.example.invalid
+Referer: https://origin.example.invalid/

@@ -1,0 +1,4 @@
+# JWT parser and algorithm-handling test markers
+eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ0ZXN0In0.
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.invalid.signature
+Bearer invalid.jwt.token
