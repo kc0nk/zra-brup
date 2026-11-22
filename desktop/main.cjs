@@ -6,6 +6,7 @@ const path = require('node:path');
 const projectRoot = path.resolve(__dirname, '..');
 const isDev = process.env.ZRA_BRUP_DEV === '1';
 let backend;
+let shuttingDown = false;
 
 function waitForPort(port, host = '127.0.0.1') {
   return new Promise((resolve) => {
@@ -26,6 +27,15 @@ function startServices() {
   }
 }
 
+function stopServices() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  if (backend && !backend.killed) {
+    backend.kill('SIGTERM');
+    setTimeout(() => { if (backend && !backend.killed) backend.kill('SIGKILL'); }, 1500).unref();
+  }
+}
+
 async function createWindow() {
   startServices();
   await waitForPort(isDev ? 5173 : 4173);
@@ -35,5 +45,5 @@ async function createWindow() {
 }
 
 app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { if (backend) backend.kill(); if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => { if (backend) backend.kill(); });
+app.on('window-all-closed', () => { stopServices(); if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', stopServices);

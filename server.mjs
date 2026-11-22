@@ -1,14 +1,19 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
+import net from 'node:net';
 import express from 'express';
 import { Proxy as MitmProxy } from 'http-mitm-proxy';
 
 const PORT = 8080;
 const UI_PORT = 4173;
+const COLLAB_HTTP_PORT = 9090;
+const COLLAB_HTTPS_PORT = 9443;
+const COLLAB_SMTP_PORT = 2525;
 const events = [];
+const collaboratorInteractions = [];
 const waiting = new Map();
 const browserProcesses = new Set();
 const browserProfiles = new Set();
@@ -16,12 +21,25 @@ let activeScope = null;
 let interceptEnabled = false;
 const proxy = new MitmProxy();
 const api = express();
+let collaboratorHttpServer;
+let collaboratorHttpsServer;
+let collaboratorSmtpServer;
+let apiServer;
 
 api.use(express.json({ limit: '2mb' }));
 api.use((_, response, next) => { response.setHeader('Access-Control-Allow-Origin', '*'); response.setHeader('Access-Control-Allow-Headers', 'Content-Type'); next(); });
 api.get('/lab/', (request, response) => { response.cookie('zra_lab_visit', 'active', { httpOnly: true, sameSite: 'lax', maxAge: 3600000 }); response.sendFile(path.join(process.cwd(), 'lab', 'index.html')); });
 api.use('/lab', express.static(path.join(process.cwd(), 'lab')));
 api.get('/api/health', (_, response) => response.json({ ok: true, port: PORT, https: 'MITM' }));
+api.get('/api/collaborator/payload', (_, response) => response.json(makeCollaboratorPayload()));
+api.get('/api/collaborator/interactions', (request, response) => {
+  const token = String(request.query.token || '').trim();
+  const type = String(request.query.type || '').trim().toUpperCase();
+  const query = String(request.query.q || '').trim().toLowerCase();
+  const rows = collaboratorInteractions.filter((item) => (!token || item.payload.includes(token)) && (!type || item.type === type) && (!query || JSON.stringify(item).toLowerCase().includes(query))).slice(-200).reverse();
+  response.json(rows);
+});
+api.delete('/api/collaborator/interactions', (_, response) => { collaboratorInteractions.length = 0; response.json({ ok: true }); });
 api.get('/api/history', (_, response) => response.json(events.filter((item) => !activeScope || inScope(item)).slice(-200).reverse()));
 api.delete('/api/history', (_, response) => { events.length = 0; response.json({ ok: true }); });
 api.get('/api/intercept/pending', (_, response) => response.json([...waiting.values()].map((item) => item.event)));
@@ -81,7 +99,63 @@ api.post('/api/repeater/send', (request, response) => {
   if (body) outgoing.write(body);
   outgoing.end();
 });
-api.listen(UI_PORT, () => console.log(`Sentinel API: http://127.0.0.1:${UI_PORT}`));
+apiServer = api.listen(UI_PORT, () => console.log(`Sentinel API: http://127.0.0.1:${UI_PORT}`));
+
+function makeCollaboratorPayload() {
+  const token = `zra-${Math.random().toString(36).slice(2, 18)}`;
+  return {
+    token,
+    http: `http://127.0.0.1:${COLLAB_HTTP_PORT}/hook/${token}`,
+    https: `https://127.0.0.1:${COLLAB_HTTPS_PORT}/hook/${token}`,
+    smtp: `smtp://${token}@127.0.0.1:${COLLAB_SMTP_PORT}`
+  };
+}
+
+function recordCollaborator(item) {
+  collaboratorInteractions.push({ id: String(Date.now() + Math.random()), time: new Date().toLocaleTimeString('en-GB'), ...item });
+  if (collaboratorInteractions.length > 1000) collaboratorInteractions.splice(0, collaboratorInteractions.length - 1000);
+}
+
+function collaboratorRequest(request, response) {
+  const parts = request.url.split('?')[0].split('/').filter(Boolean);
+  const token = decodeURIComponent(request.headers['x-zra-payload'] || parts[1] || new URL(request.url, 'http://127.0.0.1').searchParams.get('token') || 'unknown');
+  const chunks = [];
+  request.on('data', (chunk) => chunks.push(chunk));
+  request.on('end', () => {
+    recordCollaborator({ type: request.socket.encrypted ? 'HTTPS' : 'HTTP', payload: token, sourceIp: request.socket.remoteAddress?.replace(/^::ffff:/, '') || '—', comment: `${request.method} ${request.url}`, method: request.method, headers: request.headers, body: Buffer.concat(chunks).toString('utf8').slice(0, 5000) });
+    response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    response.end(JSON.stringify({ ok: true, payload: token }));
+  });
+}
+
+function startCollaboratorCollectors() {
+  collaboratorHttpServer = http.createServer(collaboratorRequest).listen(COLLAB_HTTP_PORT, '127.0.0.1', () => console.log(`Collaborator HTTP: http://127.0.0.1:${COLLAB_HTTP_PORT}`));
+  const tlsOptions = { key: requireFile(path.join(process.cwd(), '.http-mitm-proxy/keys/ca.private.key')), cert: requireFile(path.join(process.cwd(), '.http-mitm-proxy/certs/ca.pem')) };
+  collaboratorHttpsServer = https.createServer(tlsOptions, collaboratorRequest).listen(COLLAB_HTTPS_PORT, '127.0.0.1', () => console.log(`Collaborator HTTPS: https://127.0.0.1:${COLLAB_HTTPS_PORT}`));
+  collaboratorSmtpServer = net.createServer(handleCollaboratorSmtp).listen(COLLAB_SMTP_PORT, '127.0.0.1', () => console.log(`Collaborator SMTP: 127.0.0.1:${COLLAB_SMTP_PORT}`));
+}
+
+function requireFile(file) {
+  return readFileSync(file);
+}
+
+function handleCollaboratorSmtp(socket) {
+  let buffer = '';
+  socket.setEncoding('utf8');
+  socket.write('220 ZRA BRUP Collaborator SMTP\\r\\n');
+  socket.on('data', (chunk) => {
+    buffer += chunk;
+    const token = (buffer.match(/(?:RCPT TO:\s*<?|@)(zra-[a-z0-9]+)/i) || [])[1] || 'unknown';
+    if (/\\r?\\n\\.\\r?\\n/.test(buffer) || /MAIL FROM:|RCPT TO:/i.test(buffer)) {
+      recordCollaborator({ type: 'SMTP', payload: token, sourceIp: socket.remoteAddress?.replace(/^::ffff:/, '') || '—', comment: buffer.split(/\\r?\\n/).find((line) => line) || 'SMTP connection', method: 'SMTP', headers: {}, body: buffer.slice(0, 5000) });
+      buffer = '';
+    }
+    if (/\\b(HELO|EHLO)\\b/i.test(chunk)) socket.write('250-zra.local\\r\\n250 OK\\r\\n');
+    else if (/MAIL FROM:/i.test(chunk) || /RCPT TO:/i.test(chunk)) socket.write('250 OK\\r\\n');
+    else if (/\\bDATA\\b/i.test(chunk)) socket.write('354 End data with <CR><LF>.<CR><LF>\\r\\n');
+    else if (/\\bQUIT\\b/i.test(chunk)) { socket.write('221 Bye\\r\\n'); socket.end(); }
+  });
+}
 
 function add(request, isSSL = false) {
   const host = request.headers.host || 'unknown';
@@ -118,6 +192,7 @@ proxy.onRequest((context, callback) => {
 
 proxy.listen({ port: PORT, host: '127.0.0.1', sslCaDir: `${process.cwd()}/.http-mitm-proxy` });
 console.log(`Proxy MITM HTTP/HTTPS: http://127.0.0.1:${PORT}`);
+startCollaboratorCollectors();
 
 function closeProjectBrowsers() {
   for (const child of browserProcesses) {
@@ -126,6 +201,10 @@ function closeProjectBrowsers() {
   browserProcesses.clear();
   for (const profile of browserProfiles) { try { spawn('pkill', ['-TERM', '-f', profile], { stdio: 'ignore' }); } catch {} }
   browserProfiles.clear();
+  for (const server of [collaboratorHttpServer, collaboratorHttpsServer, collaboratorSmtpServer]) {
+    try { server?.close(); } catch {}
+  }
+  try { apiServer?.close(); } catch {}
 }
 process.once('SIGTERM', () => { closeProjectBrowsers(); process.exit(0); });
 process.once('SIGINT', () => { closeProjectBrowsers(); process.exit(0); });
